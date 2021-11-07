@@ -1,9 +1,9 @@
 import type { Component } from 'solid-js';
 
-import styles from './App.module.css';
-
 const App: Component = () => {
-  return <div class={styles.App}>hello world</div>;
+  return (
+    <div class="flex justify-center items-center h-screen">hello world</div>
+  );
 };
 
 export default App;
