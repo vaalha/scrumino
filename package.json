@@ -15,6 +15,7 @@
     "prepare": "husky install"
   },
   "dependencies": {
+    "@tailwindcss/aspect-ratio": "^0.3.0",
     "lodash-es": "^4.17.15",
     "solid-js": "^1.2.2"
   },
