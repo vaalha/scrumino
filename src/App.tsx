@@ -13,7 +13,7 @@ import hotkeys from 'hotkeys-js';
 const createGameLoop = (
   onTick: (time: number) => void,
   dt: number,
-  running?: Accessor<boolean>,
+  running: Accessor<boolean> = () => true,
 ) => {
   const [time, setTime] = createSignal(0);
   const [done, setDone] = createSignal(false);
@@ -28,7 +28,7 @@ const createGameLoop = (
     frameTime = Math.min(newTime - currentTime, 0.25);
     currentTime = newTime;
 
-    if (running?.()) acc += frameTime;
+    if (running()) acc += frameTime;
 
     while (acc >= dt) {
       onTick(time());
@@ -41,7 +41,7 @@ const createGameLoop = (
   requestAnimationFrame(onFrame);
   onCleanup(() => setDone(true));
 
-  return { time };
+  return [time];
 };
 
 const App: Component = () => {
@@ -51,7 +51,7 @@ const App: Component = () => {
   const [block, setBlock] = createSignal<{ speed: number }>({ speed: 1000 });
   const [running, setRunning] = createSignal(true);
 
-  const { time } = createGameLoop(
+  const [time] = createGameLoop(
     (time: number) => {
       setGrid(range(0, 10 * 16).map(() => random(1)));
     },
@@ -88,7 +88,7 @@ const App: Component = () => {
                 <div
                   class="w-full h-full m-0.5 border-2 border-transparent"
                   classList={{
-                    'bg-blue-400 border-current text-blue-700': !!cell,
+                    'bg-blue-400 border-current text-blue-600': !!cell,
                   }}
                   style={{
                     '--tw-bg-opacity': cell,
