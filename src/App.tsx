@@ -42,23 +42,25 @@ const App: Component = () => {
 
   return (
     <div class="bg-black flex flex-col justify-center items-center w-screen h-screen">
-      <div class="text-white">{time().toFixed(2)}</div>
-      <div class="bg-opacity-80 grid grid-cols-10">
-        <For each={grid()}>
-          {(cell, i) => (
-            <div
-              class="w-full h-full m-0.5 border-2 border-transparent"
-              classList={{
-                'bg-blue-400 border-current text-blue-700': !!cell,
-              }}
-              style={{
-                '--tw-bg-opacity': cell,
-                width: 'calc(75vh / 24)',
-                height: 'calc((75vh / 24)',
-              }}
-            ></div>
-          )}
-        </For>
+      <div class="-mt-10">
+        <div class="text-white">Sim Time: {time().toFixed(2)}</div>
+        <div class="bg-opacity-80 grid grid-cols-10">
+          <For each={grid()}>
+            {(cell, i) => (
+              <div
+                class="w-full h-full m-0.5 border-2 border-transparent"
+                classList={{
+                  'bg-blue-400 border-current text-blue-700': !!cell,
+                }}
+                style={{
+                  '--tw-bg-opacity': cell,
+                  width: 'calc(75vh / 24)',
+                  height: 'calc((75vh / 24)',
+                }}
+              ></div>
+            )}
+          </For>
+        </div>
       </div>
     </div>
   );
