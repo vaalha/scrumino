@@ -1,71 +1,132 @@
-import {
-  Accessor,
-  Component,
-  createSignal,
-  For,
-  onCleanup,
-  Show,
-} from 'solid-js';
-import range from 'lodash-es/range';
-import { random } from 'lodash-es';
+import { Component, createSignal, For, onCleanup, Show } from 'solid-js';
+import { createStore, produce } from 'solid-js/store';
+import { flatten, random, range } from 'lodash-es';
 import hotkeys from 'hotkeys-js';
+import { match, __, not, select, when } from 'ts-pattern';
 
-const createGameLoop = (
-  onTick: (time: number) => void,
-  dt: number,
-  running: Accessor<boolean> = () => true,
-) => {
-  const [time, setTime] = createSignal(0);
-  const [done, setDone] = createSignal(false);
+import createGameLoop from './createGameLoop';
 
-  let currentTime = 0;
-  let newTime;
-  let frameTime;
-  let acc = 0;
+type Grid = number[][];
 
-  const onFrame = (timestamp: number) => {
-    newTime = timestamp / 1000;
-    frameTime = Math.min(newTime - currentTime, 0.25);
-    currentTime = newTime;
+type Block = {
+  x: number;
+  y: number;
+  grid: Grid;
+};
 
-    if (running()) acc += frameTime;
+type Direction = 'up' | 'down' | 'left' | 'right';
 
-    while (acc >= dt) {
-      onTick(time());
-      setTime((t) => t + dt);
-      acc -= dt;
-    }
+const COLS = 10;
+const ROWS = 16;
 
-    if (!done()) requestAnimationFrame(onFrame);
-  };
-  requestAnimationFrame(onFrame);
-  onCleanup(() => setDone(true));
-
-  return [time];
+const defaultBlock = {
+  x: 4,
+  y: 0,
+  grid: [
+    [1, 1, 1, 1],
+    [1, 0, 0, 0],
+    [1, 0, 0, 0],
+    [1, 0, 0, 0],
+  ],
 };
 
 const App: Component = () => {
-  const [grid, setGrid] = createSignal<number[]>(
-    range(0, 10 * 16).map(() => random(false)),
-  );
-  const [block, setBlock] = createSignal<{ speed: number }>({ speed: 1000 });
+  const [state, setState] = createStore<{ grid: Grid }>({
+    grid: range(0, ROWS).map(() => range(0, COLS).map(() => 0)),
+  });
+
+  const [block, setBlock] = createSignal<Block>(defaultBlock);
+
+  const moveBlock = (
+    block: Block,
+    direction: Direction,
+    source: 'player' | 'timer',
+  ) => {
+    const nextBlock = {
+      ...block,
+      ...match<Direction>(direction)
+        .with('up', () => ({
+          y: block.y - 1,
+        }))
+        .with('down', () => ({
+          y: block.y + 1,
+        }))
+        .with('left', () => ({
+          x: block.x - 1,
+        }))
+        .with('right', () => ({
+          x: block.x + 1,
+        }))
+        .exhaustive(),
+    };
+
+    let collision = false;
+
+    for (let x = 0; x < 4; x++) {
+      for (let y = 0; y < 4; y++) {
+        if (block.grid[y][x] === 0) {
+          continue;
+        }
+
+        const nextX = x + nextBlock.x;
+        const nextY = y + nextBlock.y;
+
+        if (nextX < 0 || nextY < 0 || nextX >= COLS || nextY >= ROWS) {
+          collision = true;
+          break;
+        }
+
+        if (state.grid[nextY][nextX] !== 0) {
+          collision = true;
+          break;
+        }
+      }
+    }
+
+    if (!collision) {
+      setBlock(nextBlock);
+    } else if (source === 'timer') {
+      for (let x = 0; x < 4; x++) {
+        for (let y = 0; y < 4; y++) {
+          const nextX = x + nextBlock.x;
+          const nextY = y + nextBlock.y;
+
+          setState(
+            produce<{ grid: Grid }>((draft) => {
+              const nextX = x + block.x;
+              const nextY = y + block.y;
+              if (block.grid[y][x] > 0) {
+                draft.grid[y + block.y][x + block.x] = 1;
+              }
+            }),
+          );
+        }
+      }
+
+      setBlock(defaultBlock);
+    }
+  };
+
   const [running, setRunning] = createSignal(true);
 
-  const [time] = createGameLoop(
-    (time: number) => {
-      setGrid(range(0, 10 * 16).map(() => random(1)));
-    },
-    1 / 4,
-    running,
-  );
-
-  hotkeys('left, right', function (event, handler) {
-    setGrid(range(0, 10 * 16).map(() => random(1)));
+  hotkeys('up, down, left, right', function (event, handler) {
+    if (running()) {
+      moveBlock(block(), handler.key as Direction, 'player');
+    }
   });
+
   hotkeys('esc, p', function (event, handler) {
     setRunning(!running());
   });
   onCleanup(() => hotkeys.unbind());
+
+  const [time] = createGameLoop(
+    (time: number) => {
+      moveBlock(block(), 'down', 'timer');
+    },
+    1 / 2,
+    running,
+  );
 
   return (
     <div
@@ -76,28 +137,61 @@ const App: Component = () => {
         <div class="text-white text-2xl leading-4">
           TIME: {time().toFixed(2)}
         </div>
-        <div class="border-2 p-px relative">
-          <Show when={!running()}>
-            <div class="absolute inset-0 flex items-center justify-center text-white bg-black bg-opacity-80 text-4xl pt-1">
-              PAUSED
+        <div class="border-2 p-px">
+          <div class="relative">
+            <div
+              class="grid grid-cols-10"
+              style={{ 'min-width': 'calc((75vh / 24 + 4px) * 10' }}
+            >
+              <For each={flatten(state.grid)}>
+                {(cell, i) => (
+                  <div
+                    class="w-full h-full m-0.5 border-2 border-transparent"
+                    classList={{
+                      'bg-blue-400 border-current text-blue-600': !!cell,
+                    }}
+                    style={{
+                      '--tw-bg-opacity': cell,
+                      width: 'calc(75vh / 24)',
+                      height: 'calc((75vh / 24)',
+                    }}
+                  ></div>
+                )}
+              </For>
             </div>
-          </Show>
-          <div class="grid grid-cols-10">
-            <For each={grid()}>
-              {(cell, i) => (
-                <div
-                  class="w-full h-full m-0.5 border-2 border-transparent"
-                  classList={{
-                    'bg-blue-400 border-current text-blue-600': !!cell,
-                  }}
-                  style={{
-                    '--tw-bg-opacity': cell,
-                    width: 'calc(75vh / 24)',
-                    height: 'calc((75vh / 24)',
-                  }}
-                ></div>
-              )}
-            </For>
+            <div
+              class="grid grid-cols-4 absolute"
+              style={{
+                'min-width': 'calc((75vh / 24 + 4px) * 4',
+                left: `calc((75vh / 24 + 4px) * ${block().x})`,
+                top: `calc((75vh / 24 + 4px) * ${block().y})`,
+              }}
+            >
+              <Show when={block()}>
+                {(block) => (
+                  <For each={flatten(block.grid)}>
+                    {(cell, i) => (
+                      <div
+                        class="w-full h-full m-0.5 border-2 border-transparent"
+                        classList={{
+                          'bg-red-400 border-current text-red-600': !!cell,
+                        }}
+                        style={{
+                          '--tw-bg-opacity': cell,
+                          width: 'calc(75vh / 24)',
+                          height: 'calc((75vh / 24)',
+                        }}
+                      ></div>
+                    )}
+                  </For>
+                )}
+              </Show>
+            </div>
+            <Show when={!running()}>
+              <div class="absolute inset-0 flex items-center justify-center text-white bg-black bg-opacity-80 text-4xl pt-1">
+                PAUSED
+              </div>
+            </Show>
           </div>
         </div>
       </div>
