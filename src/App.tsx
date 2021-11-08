@@ -14,12 +14,20 @@ type Block = {
   grid: Grid;
 };
 
+type State = {
+  grid: Grid;
+};
+
 type Direction = 'up' | 'down' | 'left' | 'right';
 
 const COLS = 10;
 const ROWS = 16;
 
-const defaultBlock = {
+const defaultState = (): State => ({
+  grid: range(0, ROWS).map(() => range(0, COLS).map(() => 0)),
+});
+
+const defaultBlock = (): Block => ({
   x: 4,
   y: 0,
   grid: [
@@ -28,14 +36,11 @@ const defaultBlock = {
     [1, 0, 0, 0],
     [1, 0, 0, 0],
   ],
-};
+});
 
 const App: Component = () => {
-  const [state, setState] = createStore<{ grid: Grid }>({
-    grid: range(0, ROWS).map(() => range(0, COLS).map(() => 0)),
-  });
-
-  const [block, setBlock] = createSignal<Block>(defaultBlock);
+  const [state, setState] = createStore(defaultState());
+  const [block, setBlock] = createSignal(defaultBlock());
 
   const moveBlock = (
     block: Block,
@@ -113,6 +118,11 @@ const App: Component = () => {
     if (running()) {
       moveBlock(block(), handler.key as Direction, 'player');
     }
+  });
+
+  hotkeys('r', function (event, handler) {
+    setState(defaultState());
+    setBlock(defaultBlock());
   });
 
   hotkeys('esc, p', function (event, handler) {
