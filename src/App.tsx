@@ -1,10 +1,10 @@
 import { Component, createSignal, For, onCleanup, Show } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
 import { flatten, random, range } from 'lodash-es';
-import hotkeys from 'hotkeys-js';
 import { match, __, not, select, when } from 'ts-pattern';
 
 import createGameLoop from './createGameLoop';
+import createEventListener from '@solid-primitives/event-listener';
 
 type Grid = number[][];
 
@@ -31,12 +31,35 @@ const defaultBlock = (): Block => ({
   x: 4,
   y: 0,
   grid: [
-    [1, 1, 1, 1],
-    [1, 0, 0, 0],
-    [1, 0, 0, 0],
-    [1, 0, 0, 0],
+    [0, 0, 0, 0],
+    [0, 1, 1, 0],
+    [0, 1, 1, 0],
+    [0, 0, 0, 0],
   ],
 });
+
+const detectCollision = (grid: Grid, block: Block) => {
+  for (let x = 0; x < 4; x++) {
+    for (let y = 0; y < 4; y++) {
+      if (block.grid[y][x] === 0) {
+        continue;
+      }
+
+      const nextX = x + block.x;
+      const nextY = y + block.y;
+
+      if (nextX < 0 || nextY < 0 || nextX >= COLS || nextY >= ROWS) {
+        return true;
+      }
+
+      if (grid[nextY][nextX] !== 0) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
 
 const App: Component = () => {
   const [state, setState] = createStore(defaultState());
@@ -45,52 +68,29 @@ const App: Component = () => {
   const moveBlock = (
     block: Block,
     direction: Direction,
-    source: 'player' | 'timer',
+    source: 'player' | 'physics',
   ) => {
     const nextBlock = {
       ...block,
-      ...match<Direction>(direction)
-        .with('up', () => ({
-          y: block.y - 1,
+      ...match(direction)
+        .with('up', 'down', (d) => ({
+          y: block.y + (d == 'up' ? -1 : 1),
         }))
-        .with('down', () => ({
-          y: block.y + 1,
-        }))
-        .with('left', () => ({
-          x: block.x - 1,
-        }))
-        .with('right', () => ({
-          x: block.x + 1,
+        .with('left', 'right', (d) => ({
+          x: block.x + (d == 'left' ? -1 : 1),
         }))
         .exhaustive(),
     };
 
-    let collision = false;
-
-    for (let x = 0; x < 4; x++) {
-      for (let y = 0; y < 4; y++) {
-        if (block.grid[y][x] === 0) {
-          continue;
-        }
-
-        const nextX = x + nextBlock.x;
-        const nextY = y + nextBlock.y;
-
-        if (nextX < 0 || nextY < 0 || nextX >= COLS || nextY >= ROWS) {
-          collision = true;
-          break;
-        }
-
-        if (state.grid[nextY][nextX] !== 0) {
-          collision = true;
-          break;
-        }
-      }
-    }
+    const collision = detectCollision(state.grid, nextBlock);
 
     if (!collision) {
-      setBlock(nextBlock);
-    } else if (source === 'timer') {
+      if (source === 'player' && direction === 'down') {
+        nextTick = frame();
+      } else {
+        setBlock(nextBlock);
+      }
+    } else if (source === 'physics') {
       for (let x = 0; x < 4; x++) {
         for (let y = 0; y < 4; y++) {
           const nextX = x + nextBlock.x;
@@ -112,31 +112,40 @@ const App: Component = () => {
     }
   };
 
+  const tickRate = 60;
   const [running, setRunning] = createSignal(true);
-
-  hotkeys('up, down, left, right', function (event, handler) {
-    if (running()) {
-      moveBlock(block(), handler.key as Direction, 'player');
-    }
-  });
-
-  hotkeys('r', function (event, handler) {
-    setState(defaultState());
-    setBlock(defaultBlock());
-  });
-
-  hotkeys('esc, p', function (event, handler) {
-    setRunning(!running());
-  });
-  onCleanup(() => hotkeys.unbind());
+  const [frame, setFrame] = createSignal(0);
+  let nextTick = 0;
 
   const [time] = createGameLoop(
     (time: number) => {
-      moveBlock(block(), 'down', 'timer');
+      setFrame((f) => ++f);
+
+      if (frame() >= nextTick) {
+        moveBlock(block(), 'down', 'physics');
+        nextTick += tickRate;
+      }
     },
-    1 / 2,
+    1 / 60,
     running,
   );
+
+  createEventListener(window, 'keydown', (e) => {
+    if (e instanceof KeyboardEvent) {
+      match(e.key)
+        .with('ArrowLeft', running, () => moveBlock(block(), 'left', 'player'))
+        .with('ArrowRight', running, () =>
+          moveBlock(block(), 'right', 'player'),
+        )
+        .with('ArrowDown', running, () => moveBlock(block(), 'down', 'player'))
+        .with('r', running, () => {
+          setState(defaultState());
+          setBlock(defaultBlock());
+        })
+        .with('Escape', 'p', () => setRunning(!running()))
+        .otherwise(() => {});
+    }
+  });
 
   return (
     <div
@@ -144,8 +153,9 @@ const App: Component = () => {
       style={{ height: '95vh' }}
     >
       <div class="select-none">
-        <div class="text-white text-2xl leading-4">
-          TIME: {time().toFixed(2)}
+        <div class="text-white text-2xl leading-4 flex">
+          <div>TIME: {time().toFixed(1)}</div>
+          <div class="ml-auto">{frame()}</div>
         </div>
         <div class="border-2 p-px">
           <div class="relative">
