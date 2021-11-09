@@ -279,17 +279,19 @@ const App: Component = () => {
         .with('ArrowRight', running, () =>
           moveBlock(block(), 'right', 'player'),
         )
-        // .with('ArrowUp', running, () => moveBlock(block(), 'up', 'player'))
         .with('ArrowDown', running, () => moveBlock(block(), 'down', 'player'))
         .with(' ', running, () => {
           while (moveBlock(block(), 'down', 'physics')) {}
         })
-        .with('r', running, () => {
-          setState(defaultState());
-          setBlock(defaultBlock(time()));
+        .with('r', () => {
+          if (!running()) {
+            setState(defaultState());
+            setBlock(defaultBlock(time()));
+            setRunning(true);
+          }
         })
-        .with('z', 'x', (k) => {
-          if (running()) rotateBlock(block(), k === 'x');
+        .with('z', 'x', 'ArrowUp', (k) => {
+          if (running()) rotateBlock(block(), k !== 'z');
         })
         .with('Escape', 'p', () => setRunning(!running()))
         .otherwise(() => {});
@@ -336,7 +338,10 @@ const App: Component = () => {
             </div>
             <Show when={!running()}>
               <div class="absolute inset-0 flex items-center justify-center text-white bg-black bg-opacity-80 text-4xl pt-1">
-                PAUSED
+                <div class="text-center">
+                  <div>ESC - PAUSED</div>
+                  <div>R - RESET</div>
+                </div>
               </div>
             </Show>
           </div>
