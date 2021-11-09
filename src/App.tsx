@@ -32,8 +32,8 @@ type Block = {
   color: string;
   grid: ShapeGrid;
 
-  points: number;
   cooldown: number;
+  lastTime: number;
 };
 
 const COLS = 10;
@@ -118,17 +118,20 @@ const defaultState = (): State => ({
   grid: range(0, ROWS).map(() => range(0, COLS).map(() => '')),
 });
 
-const defaultBlock = (time: number): Block => {
+const defaultBlock = (time: number, block?: Block): Block => {
   const shape = shuffle(Object.keys(TETROMINOS))[0] as Shape;
   const tetromino = TETROMINOS[shape];
   const shapeGrid = tetromino.grid.map((row) =>
     row.map((x) => (x ? shape : '')),
   );
 
+  const cooldown = block?.cooldown || 1;
+
   return {
+    ...(block && { block }),
     ...tetromino,
-    points: 1,
-    cooldown: time + 1,
+    cooldown,
+    lastTime: time,
     grid: shapeGrid,
   };
 };
@@ -213,13 +216,15 @@ const App: Component = () => {
 
     if (!collision) {
       if (source === 'player' && direction === 'down') {
-        nextBlock.cooldown = time() + block.points;
+        nextBlock.lastTime = time();
       }
       setBlock(nextBlock);
     } else if (source === 'physics') {
       stampBlock(block);
-      setBlock(defaultBlock(time()));
+      setBlock(defaultBlock(time(), block));
     }
+
+    return !collision;
   };
 
   const rotateBlock = (block: Block, clockwise: boolean) => {
@@ -238,9 +243,29 @@ const App: Component = () => {
       setFrame((f) => ++f);
 
       const b = block();
-      if (time >= b.cooldown) {
-        b.cooldown = time + b.points;
+      if (time >= b.lastTime + b.cooldown) {
+        b.lastTime = time;
         moveBlock(b, 'down', 'physics');
+      }
+
+      for (let y = 0; y < ROWS; y++) {
+        if (state.grid[y].every((cell) => cell !== '')) {
+          setBlock((prev) => ({
+            ...prev,
+            cooldown: prev.cooldown - 0.01,
+            lastTime: time,
+          }));
+          setState(
+            produce<State>((draft) => {
+              draft.grid.splice(y, 1);
+              draft.grid.splice(
+                0,
+                0,
+                range(0, COLS).map(() => ''),
+              );
+            }),
+          );
+        }
       }
     },
     1 / 60,
@@ -254,11 +279,10 @@ const App: Component = () => {
         .with('ArrowRight', running, () =>
           moveBlock(block(), 'right', 'player'),
         )
-        .with('ArrowUp', running, () => moveBlock(block(), 'up', 'player'))
+        // .with('ArrowUp', running, () => moveBlock(block(), 'up', 'player'))
         .with('ArrowDown', running, () => moveBlock(block(), 'down', 'player'))
         .with(' ', running, () => {
-          stampBlock(block());
-          setBlock(defaultBlock(time()));
+          while (moveBlock(block(), 'down', 'physics')) {}
         })
         .with('r', running, () => {
           setState(defaultState());
