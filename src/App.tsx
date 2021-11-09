@@ -313,6 +313,7 @@ const App: Component = () => {
           if (!running()) {
             setState(defaultState());
             setBlock(defaultBlock(time()));
+            setGameOver(false);
             setRunning(true);
           }
         })
@@ -344,8 +345,11 @@ const App: Component = () => {
         <div class="border-2 p-px">
           <div class="relative">
             <div
-              class="grid grid-cols-10"
-              style={{ 'min-width': 'calc((75vh / 24 + 4px) * 10' }}
+              class="grid"
+              style={{
+                'min-width': `calc((75vh / 24 + 4px) * ${COLS}`,
+                'grid-template-columns': `repeat(${COLS}, minmax(0, 1fr))`,
+              }}
             >
               <For each={flatten(state.grid)}>
                 {(cell, i) => <Cell cell={cell} />}
