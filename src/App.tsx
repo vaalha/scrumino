@@ -333,66 +333,61 @@ const App: Component = () => {
   });
 
   return (
-    <div
-      class="flex flex-col justify-center items-center w-screen"
-      style={{ height: '95vh' }}
-    >
-      <div class="select-none">
-        <div class="text-white text-2xl leading-4 flex">
-          <div>TIME: {time().toFixed(1)}</div>
-          <div class="ml-auto">{frame()}</div>
-        </div>
-        <div class="border-2 p-px">
-          <div class="relative">
-            <div
-              class="grid"
-              style={{
-                'min-width': `calc((75vh / 24 + 4px) * ${COLS}`,
-                'grid-template-columns': `repeat(${COLS}, minmax(0, 1fr))`,
-              }}
-            >
-              <For each={flatten(state.grid)}>
-                {(cell, i) => <Cell cell={cell} />}
-              </For>
-            </div>
-            <div class="animate-pulse">
-              <Block
-                block={ghost()}
-                renderCell={(cell: Cell) => (
-                  <Cell
-                    cell={cell}
-                    class="text-white bg-black border-dashed"
-                    style={{ opacity: cell !== '' ? 0.6 : 0 }}
-                  />
-                )}
-              />
-            </div>
+    <div class="select-none">
+      <div class="text-white text-2xl leading-4 flex">
+        <div>TIME: {time().toFixed(1)}</div>
+        <div class="ml-auto">{frame()}</div>
+      </div>
+      <div class="border-2 p-px">
+        <div class="relative">
+          <div
+            class="grid"
+            style={{
+              'min-width': `calc((75vh / 64 + 4px) * ${COLS}`,
+              'grid-template-columns': `repeat(${COLS}, minmax(0, 1fr))`,
+            }}
+          >
+            <For each={flatten(state.grid)}>
+              {(cell, i) => <Cell cell={cell} />}
+            </For>
+          </div>
+          <div class="animate-pulse">
             <Block
-              block={block()}
-              renderCell={(cell: Cell) => <Cell cell={cell} />}
+              block={ghost()}
+              renderCell={(cell: Cell) => (
+                <Cell
+                  cell={cell}
+                  class="text-white bg-black border-dashed"
+                  style={{ opacity: cell !== '' ? 0.6 : 0 }}
+                />
+              )}
             />
-            <Show when={!running()}>
-              <Show
-                when={!gameOver()}
-                fallback={
-                  <div class="absolute inset-0 flex items-center justify-center text-white bg-black bg-opacity-80 text-4xl pt-1">
-                    <div class="text-center">
-                      <div>GAME OVER</div>
-                      <div>PRESS 'R' TO RESTART</div>
-                    </div>
-                  </div>
-                }
-              >
+          </div>
+          <Block
+            block={block()}
+            renderCell={(cell: Cell) => <Cell cell={cell} />}
+          />
+          <Show when={!running()}>
+            <Show
+              when={!gameOver()}
+              fallback={
                 <div class="absolute inset-0 flex items-center justify-center text-white bg-black bg-opacity-80 text-4xl pt-1">
                   <div class="text-center">
-                    <div>PAUSED</div>
-                    <div>PRESS 'P' TO RESUME</div>
+                    <div>GAME OVER</div>
                     <div>PRESS 'R' TO RESTART</div>
                   </div>
                 </div>
-              </Show>
+              }
+            >
+              <div class="absolute inset-0 flex items-center justify-center text-white bg-black bg-opacity-80 text-4xl pt-1">
+                <div class="text-center">
+                  <div>PAUSED</div>
+                  <div>PRESS 'P' TO RESUME</div>
+                  <div>PRESS 'R' TO RESTART</div>
+                </div>
+              </div>
             </Show>
-          </div>
+          </Show>
         </div>
       </div>
     </div>
@@ -408,9 +403,9 @@ const Block: Component<{
       props.block.grid.length === 4 ? 'grid-cols-4' : 'grid-cols-3'
     } absolute`}
     style={{
-      'min-width': `calc((75vh / 24 + 4px) * ${props.block.grid.length}`,
-      left: `calc((75vh / 24 + 4px) * ${props.block.x})`,
-      top: `calc((75vh / 24 + 4px) * ${props.block.y})`,
+      'min-width': `calc((75vh / 64 + 4px) * ${props.block.grid.length}`,
+      left: `calc((75vh / 64 + 4px) * ${props.block.x})`,
+      top: `calc((75vh / 64 + 4px) * ${props.block.y})`,
     }}
   >
     <Show when={props.block}>
@@ -430,11 +425,28 @@ const Cell: Component<{
     }`}
     style={{
       opacity: props.cell !== '' ? 1 : 0,
-      width: 'calc(75vh / 24)',
-      height: 'calc((75vh / 24)',
+      width: 'calc(75vh / 64)',
+      height: 'calc((75vh / 64)',
       ...(props.style && props.style),
     }}
   ></div>
 );
 
-export default App;
+const BiggerApp: Component = () => {
+  return (
+    <div
+      class="flex flex-col justify-center items-center w-screen"
+      style={{ height: '95vh' }}
+    >
+      <div class="relative flex flex-wrap justify-center items-center">
+        {range(16).map(() => (
+          <div class="m-1">
+            <App />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default BiggerApp;
