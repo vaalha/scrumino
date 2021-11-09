@@ -321,11 +321,6 @@
   dependencies:
     solid-js "^1.1.6"
 
-"@tailwindcss/aspect-ratio@^0.3.0":
-  version "0.3.0"
-  resolved "https://registry.yarnpkg.com/@tailwindcss/aspect-ratio/-/aspect-ratio-0.3.0.tgz#f779ab3f07cac848fb844122d6662ba6560010b8"
-  integrity sha512-DMgWskNJR6FNPLbQ8Xoq/PKV/9DfNKh5dvKB+SM8x7lVl4+pnxlZ3Ns4+yGmurA/ze708HrnCG1tXk85HolJmw==
-
 "@tootallnate/once@2":
   version "2.0.0"
   resolved "https://registry.yarnpkg.com/@tootallnate/once/-/once-2.0.0.tgz#f544a148d3ab35801c1f633a7441fd87c2e484bf"

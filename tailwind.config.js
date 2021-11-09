@@ -5,10 +5,15 @@ module.exports = {
     fontFamily: {
       sans: ['Dongle', 'sans-serif'],
     },
+    colors: {
+      transparent: 'transparent',
+      current: 'currentColor',
+      ...require('tailwindcss/colors'),
+    },
     extend: {},
   },
   variants: {
     extend: {},
   },
-  plugins: [require('@tailwindcss/aspect-ratio')],
+  plugins: [],
 };
