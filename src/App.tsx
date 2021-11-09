@@ -1,4 +1,13 @@
-import { Component, createSignal, For, onCleanup, Show } from 'solid-js';
+import {
+  Component,
+  createEffect,
+  createRenderEffect,
+  createSignal,
+  For,
+  JSX,
+  onCleanup,
+  Show,
+} from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
 import { flatten, random, range, shuffle } from 'lodash-es';
 import { match, __, not, select, when } from 'ts-pattern';
@@ -159,24 +168,13 @@ const detectCollision = (grid: ShapeGrid, block: Block) => {
   return false;
 };
 
-const Cell: Component<{ cell: Cell }> = (props) => (
-  <div
-    class={`w-full h-full m-0.5 border-2 border-current ${
-      props.cell !== '' && TETROMINOS[props.cell].color
-    }`}
-    style={{
-      opacity: props.cell !== '' ? 1 : 0,
-      width: 'calc(75vh / 24)',
-      height: 'calc((75vh / 24)',
-    }}
-  ></div>
-);
-
 const App: Component = () => {
   const [state, setState] = createStore(defaultState());
   const [block, setBlock] = createSignal(defaultBlock(0));
+  const [ghost, setGhost] = createSignal(block());
   const [running, setRunning] = createSignal(true);
   const [frame, setFrame] = createSignal(0);
+  const [gameOver, setGameOver] = createSignal(false);
 
   const stampBlock = (block: Block) => {
     setState(
@@ -196,11 +194,7 @@ const App: Component = () => {
     );
   };
 
-  const moveBlock = (
-    block: Block,
-    direction: Direction,
-    source: 'player' | 'physics',
-  ) => {
+  const moveBlock = (block: Block, direction: Direction): [boolean, Block] => {
     const nextBlock = { ...block };
 
     match(direction)
@@ -212,31 +206,39 @@ const App: Component = () => {
       })
       .exhaustive();
 
-    const collision = detectCollision(state.grid, nextBlock);
+    return [detectCollision(state.grid, nextBlock), nextBlock];
+  };
 
-    if (!collision) {
-      if (source === 'player' && direction === 'down') {
-        nextBlock.lastTime = time();
+  const rotateBlock = (block: Block, clockwise: boolean): [boolean, Block] => {
+    const nextBlock = {
+      ...block,
+      grid: clockwise
+        ? block.grid[0].map((_, index) =>
+            block.grid.map((row) => row[index]).reverse(),
+          )
+        : block.grid
+            .map((row) => row.reverse())[0]
+            .map((_, index) => block.grid.map((row) => row[index])),
+    };
+
+    return [detectCollision(state.grid, nextBlock), nextBlock];
+  };
+
+  const findDropCollision = (block: Block): Block => {
+    let nextPos = block;
+    for (;;) {
+      const [collision, nextBlock] = moveBlock(nextPos, 'down');
+      if (collision) {
+        return nextPos;
+      } else {
+        nextPos = nextBlock;
       }
-      setBlock(nextBlock);
-    } else if (source === 'physics') {
-      stampBlock(block);
-      setBlock(defaultBlock(time(), block));
     }
-
-    return !collision;
   };
 
-  const rotateBlock = (block: Block, clockwise: boolean) => {
-    const newGrid = clockwise
-      ? block.grid[0].map((_, index) =>
-          block.grid.map((row) => row[index]).reverse(),
-        )
-      : block.grid
-          .map((row) => row.reverse())[0]
-          .map((_, index) => block.grid.map((row) => row[index]));
-    setBlock((prev) => ({ ...prev, grid: newGrid }));
-  };
+  createRenderEffect(() => {
+    setGhost(findDropCollision(block()));
+  });
 
   const [time] = createGameLoop(
     (time: number) => {
@@ -245,7 +247,18 @@ const App: Component = () => {
       const b = block();
       if (time >= b.lastTime + b.cooldown) {
         b.lastTime = time;
-        moveBlock(b, 'down', 'physics');
+        const [collision, nextBlock] = moveBlock(b, 'down');
+        if (collision) {
+          stampBlock(block());
+          setBlock(defaultBlock(time, block()));
+
+          if (detectCollision(state.grid, block())) {
+            setGameOver(true);
+            setRunning(false);
+          }
+        } else {
+          setBlock(nextBlock);
+        }
       }
 
       for (let y = 0; y < ROWS; y++) {
@@ -275,13 +288,26 @@ const App: Component = () => {
   createEventListener(window, 'keydown', (e) => {
     if (e instanceof KeyboardEvent) {
       match(e.key)
-        .with('ArrowLeft', running, () => moveBlock(block(), 'left', 'player'))
-        .with('ArrowRight', running, () =>
-          moveBlock(block(), 'right', 'player'),
-        )
-        .with('ArrowDown', running, () => moveBlock(block(), 'down', 'player'))
+        .with('ArrowLeft', running, () => {
+          const [collision, nextBlock] = moveBlock(block(), 'left');
+          if (!collision) setBlock(nextBlock);
+        })
+        .with('ArrowRight', running, () => {
+          const [collision, nextBlock] = moveBlock(block(), 'right');
+          if (!collision) setBlock(nextBlock);
+        })
+        .with('ArrowDown', running, () => {
+          const [collision, nextBlock] = moveBlock(block(), 'down');
+          if (!collision) {
+            nextBlock.lastTime = time();
+            setBlock(nextBlock);
+          }
+        })
         .with(' ', running, () => {
-          while (moveBlock(block(), 'down', 'physics')) {}
+          setBlock({
+            ...findDropCollision(block()),
+            lastTime: 0,
+          });
         })
         .with('r', () => {
           if (!running()) {
@@ -291,9 +317,16 @@ const App: Component = () => {
           }
         })
         .with('z', 'x', 'ArrowUp', (k) => {
-          if (running()) rotateBlock(block(), k !== 'z');
+          if (running()) {
+            const [collision, nextBlock] = rotateBlock(block(), k !== 'z');
+            if (!collision) setBlock(nextBlock);
+          }
         })
-        .with('Escape', 'p', () => setRunning(!running()))
+        .with('Escape', 'p', () => {
+          if (!gameOver()) {
+            setRunning(!running());
+          }
+        })
         .otherwise(() => {});
     }
   });
@@ -318,31 +351,42 @@ const App: Component = () => {
                 {(cell, i) => <Cell cell={cell} />}
               </For>
             </div>
-            <div
-              class={`grid ${
-                block().grid.length === 4 ? 'grid-cols-4' : 'grid-cols-3'
-              } absolute`}
-              style={{
-                'min-width': `calc((75vh / 24 + 4px) * ${block().grid.length}`,
-                left: `calc((75vh / 24 + 4px) * ${block().x})`,
-                top: `calc((75vh / 24 + 4px) * ${block().y})`,
-              }}
-            >
-              <Show when={block()}>
-                {(block) => (
-                  <For each={flatten(block.grid)}>
-                    {(cell, i) => <Cell cell={cell} />}
-                  </For>
+            <div class="animate-pulse">
+              <Block
+                block={ghost()}
+                renderCell={(cell: Cell) => (
+                  <Cell
+                    cell={cell}
+                    class="text-white bg-black border-dashed"
+                    style={{ opacity: cell !== '' ? 0.6 : 0 }}
+                  />
                 )}
-              </Show>
+              />
             </div>
+            <Block
+              block={block()}
+              renderCell={(cell: Cell) => <Cell cell={cell} />}
+            />
             <Show when={!running()}>
-              <div class="absolute inset-0 flex items-center justify-center text-white bg-black bg-opacity-80 text-4xl pt-1">
-                <div class="text-center">
-                  <div>ESC - PAUSED</div>
-                  <div>R - RESET</div>
+              <Show
+                when={!gameOver()}
+                fallback={
+                  <div class="absolute inset-0 flex items-center justify-center text-white bg-black bg-opacity-80 text-4xl pt-1">
+                    <div class="text-center">
+                      <div>GAME OVER</div>
+                      <div>PRESS 'R' TO RESTART</div>
+                    </div>
+                  </div>
+                }
+              >
+                <div class="absolute inset-0 flex items-center justify-center text-white bg-black bg-opacity-80 text-4xl pt-1">
+                  <div class="text-center">
+                    <div>PAUSED</div>
+                    <div>PRESS 'P' TO RESUME</div>
+                    <div>PRESS 'R' TO RESTART</div>
+                  </div>
                 </div>
-              </div>
+              </Show>
             </Show>
           </div>
         </div>
@@ -350,5 +394,43 @@ const App: Component = () => {
     </div>
   );
 };
+
+const Block: Component<{
+  block: Block;
+  renderCell: (cell: Cell) => JSX.Element;
+}> = (props) => (
+  <div
+    class={`grid ${
+      props.block.grid.length === 4 ? 'grid-cols-4' : 'grid-cols-3'
+    } absolute`}
+    style={{
+      'min-width': `calc((75vh / 24 + 4px) * ${props.block.grid.length}`,
+      left: `calc((75vh / 24 + 4px) * ${props.block.x})`,
+      top: `calc((75vh / 24 + 4px) * ${props.block.y})`,
+    }}
+  >
+    <Show when={props.block}>
+      {(block) => <For each={flatten(block.grid)}>{props?.renderCell}</For>}
+    </Show>
+  </div>
+);
+
+const Cell: Component<{
+  cell: Cell;
+  style?: any;
+  class?: string;
+}> = (props) => (
+  <div
+    class={`w-full h-full m-0.5 border-2 border-current ${
+      props.class || (props.cell !== '' ? TETROMINOS[props.cell].color : '')
+    }`}
+    style={{
+      opacity: props.cell !== '' ? 1 : 0,
+      width: 'calc(75vh / 24)',
+      height: 'calc((75vh / 24)',
+      ...(props.style && props.style),
+    }}
+  ></div>
+);
 
 export default App;
