@@ -223,9 +223,13 @@ const App: Component = () => {
   };
 
   const rotateBlock = (block: Block, clockwise: boolean) => {
-    const newGrid = block.grid[0].map((val, index) =>
-      block.grid.map((row) => row[index]).reverse(),
-    );
+    const newGrid = clockwise
+      ? block.grid[0].map((_, index) =>
+          block.grid.map((row) => row[index]).reverse(),
+        )
+      : block.grid
+          .map((row) => row.reverse())[0]
+          .map((_, index) => block.grid.map((row) => row[index]));
     setBlock((prev) => ({ ...prev, grid: newGrid }));
   };
 
