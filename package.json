@@ -18,6 +18,7 @@
     "@solid-primitives/event-listener": "^1.2.3",
     "lodash-es": "^4.17.15",
     "solid-js": "^1.2.2",
+    "splitting": "^1.0.6",
     "ts-pattern": "^3.3.3"
   },
   "devDependencies": {

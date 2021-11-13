@@ -11,3 +11,24 @@ body {
   position: relative;
   background: #000;
 }
+
+@font-face {
+  font-family: 'ToshibaSat 8x8';
+  src: url(/fonts/WebPlus_ToshibaSat_8x8.woff) format('woff');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'ToshibaSat 8x14';
+  src: url(/fonts/WebPlus_ToshibaSat_8x14.woff) format('woff');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'ToshibaSat 8x16';
+  src: url(/fonts/WebPlus_ToshibaSat_8x16.woff) format('woff');
+  font-weight: normal;
+  font-style: normal;
+}

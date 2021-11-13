@@ -4,9 +4,11 @@ import {
   createRenderEffect,
   createSignal,
   For,
+  Index,
   JSX,
   onCleanup,
   Show,
+  splitProps,
 } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
 import { flatten, random, range, shuffle } from 'lodash-es';
@@ -15,15 +17,16 @@ import { match, __, not, select, when } from 'ts-pattern';
 import createGameLoop from './createGameLoop';
 import createEventListener from '@solid-primitives/event-listener';
 
-type Grid = number[][];
+type Cell = '0' | 'I' | 'J' | 'L' | 'O' | 'S' | 'T' | 'Z';
 
-type Shape = 'I' | 'J' | 'L' | 'O' | 'S' | 'T' | 'Z';
-type Cell = '' | Shape;
+type FilledCell = Exclude<Cell, '0'>;
 
-type ShapeGrid = Cell[][];
+type Grid = Cell[][];
+
+type GridTemplate = string;
 
 type State = {
-  grid: ShapeGrid;
+  grid: Grid;
 };
 
 type Direction = 'up' | 'down' | 'left' | 'right';
@@ -32,107 +35,111 @@ type Tetromino = {
   x: number;
   y: number;
   color: string;
-  grid: Grid;
+  template: GridTemplate;
 };
 
 type Block = {
   x: number;
   y: number;
   color: string;
-  grid: ShapeGrid;
-
+  grid: Grid;
   cooldown: number;
   lastTime: number;
 };
 
 const COLS = 10;
 const ROWS = 16;
+const CELL_SIZE = 12;
 
-const TETROMINOS: Record<Shape, Tetromino> = {
+const TETROMINOS: Record<FilledCell, Tetromino> = {
   I: {
     x: 3,
     y: 0,
-    color: 'bg-cyan-400 text-cyan-600',
-    grid: [
-      [0, 1, 0, 0],
-      [0, 1, 0, 0],
-      [0, 1, 0, 0],
-      [0, 1, 0, 0],
-    ],
+    color: 'bg-cyan-400 text-cyan-700',
+    template: `
+      0I00
+      0I00
+      0I00
+      0I00
+    `,
   },
   J: {
     x: 4,
     y: 0,
-    color: 'bg-blue-400 text-blue-600',
-    grid: [
-      [0, 1, 0],
-      [0, 1, 0],
-      [1, 1, 0],
-    ],
+    color: 'bg-blue-400 text-blue-700',
+    template: `
+      0J0
+      0J0
+      JJ0
+    `,
   },
   L: {
     x: 3,
     y: 0,
-    color: 'bg-orange-400 text-orange-600',
-    grid: [
-      [0, 1, 0],
-      [0, 1, 0],
-      [0, 1, 1],
-    ],
+    color: 'bg-orange-400 text-orange-700',
+    template: `
+      0L0
+      0L0
+      0LL
+    `,
   },
   O: {
     x: 3,
     y: -1,
-    color: 'bg-amber-400 text-amber-600',
-    grid: [
-      [0, 0, 0, 0],
-      [0, 1, 1, 0],
-      [0, 1, 1, 0],
-      [0, 0, 0, 0],
-    ],
+    color: 'bg-amber-400 text-amber-700',
+    template: `
+      0000
+      0OO0
+      0OO0
+      0000
+    `,
   },
   S: {
     x: 4,
     y: 0,
-    color: 'bg-green-400 text-green-600',
-    grid: [
-      [1, 0, 0],
-      [1, 1, 0],
-      [0, 1, 0],
-    ],
+    color: 'bg-green-400 text-green-700',
+    template: `
+      S00
+      SS0
+      0S0
+    `,
   },
   T: {
     x: 3,
     y: 0,
-    color: 'bg-purple-400 text-purple-600',
-    grid: [
-      [0, 1, 0],
-      [1, 1, 1],
-      [0, 0, 0],
-    ],
+    color: 'bg-purple-400 text-purple-700',
+    template: `
+      0T0
+      TTT
+      000
+    `,
   },
   Z: {
     x: 4,
     y: 0,
-    color: 'bg-red-400 text-red-600',
-    grid: [
-      [0, 1, 0],
-      [1, 1, 0],
-      [1, 0, 0],
-    ],
+    color: 'bg-red-400 text-red-700',
+    template: `
+      0Z0
+      ZZ0
+      Z00
+    `,
   },
 };
 
 const defaultState = (): State => ({
-  grid: range(0, ROWS).map(() => range(0, COLS).map(() => '')),
+  grid: range(0, ROWS).map(() => range(0, COLS).map(() => '0')),
 });
 
 const defaultBlock = (time: number, block?: Block): Block => {
-  const shape = shuffle(Object.keys(TETROMINOS))[0] as Shape;
+  const shape = shuffle(Object.keys(TETROMINOS))[0] as FilledCell;
   const tetromino = TETROMINOS[shape];
-  const shapeGrid = tetromino.grid.map((row) =>
-    row.map((x) => (x ? shape : '')),
-  );
+
+  const grid = tetromino.template
+    .trim()
+    .split(/\n+/)
+    .map((line) => {
+      return line.trim().split('') as Cell[];
+    });
 
   const cooldown = block?.cooldown || 1;
 
@@ -141,14 +148,14 @@ const defaultBlock = (time: number, block?: Block): Block => {
     ...tetromino,
     cooldown,
     lastTime: time,
-    grid: shapeGrid,
+    grid,
   };
 };
 
-const detectCollision = (grid: ShapeGrid, block: Block) => {
-  for (let x = 0; x < block.grid.length; x++) {
-    for (let y = 0; y < block.grid.length; y++) {
-      if (!block.grid[y][x]) {
+function detectCollision(grid: Grid, block: Block) {
+  for (let y = 0; y < block.grid.length; y++) {
+    for (let x = 0; x < block.grid.length; x++) {
+      if (block.grid[y][x] === '0') {
         continue;
       }
 
@@ -159,85 +166,75 @@ const detectCollision = (grid: ShapeGrid, block: Block) => {
         return true;
       }
 
-      if (grid[nextY][nextX] !== '') {
+      if (grid[nextY][nextX] !== '0') {
         return true;
       }
     }
   }
 
   return false;
-};
+}
 
-const App: Component = () => {
+function moveBlock(
+  grid: Grid,
+  block: Block,
+  direction: Direction,
+): [boolean, Block] {
+  const nextBlock = { ...block };
+
+  match(direction)
+    .with('up', 'down', (d) => {
+      nextBlock.y = block.y + (d == 'up' ? -1 : 1);
+    })
+    .with('left', 'right', (d) => {
+      nextBlock.x = block.x + (d == 'left' ? -1 : 1);
+    })
+    .exhaustive();
+
+  return [detectCollision(grid, nextBlock), nextBlock];
+}
+
+function rotateBlock(
+  grid: Grid,
+  block: Block,
+  clockwise: boolean,
+): [boolean, Block] {
+  const nextBlock = {
+    ...block,
+    grid: clockwise
+      ? block.grid[0].map((_, index) =>
+          block.grid.map((row) => row[index]).reverse(),
+        )
+      : block.grid
+          .map((row) => row.reverse())[0]
+          .map((_, index) => block.grid.map((row) => row[index])),
+  };
+
+  return [detectCollision(grid, nextBlock), nextBlock];
+}
+
+function findDropCollision(grid: Grid, block: Block): Block {
+  let nextPos = block;
+  for (;;) {
+    const [collision, nextBlock] = moveBlock(grid, nextPos, 'down');
+    if (collision) {
+      return nextPos;
+    } else {
+      nextPos = nextBlock;
+    }
+  }
+}
+
+const Stack: Component = () => {
   const [state, setState] = createStore(defaultState());
   const [block, setBlock] = createSignal(defaultBlock(0));
   const [ghost, setGhost] = createSignal(block());
-  const [running, setRunning] = createSignal(true);
   const [frame, setFrame] = createSignal(0);
+  const [running, setRunning] = createSignal(true);
   const [gameOver, setGameOver] = createSignal(false);
 
-  const stampBlock = (block: Block) => {
-    setState(
-      produce<State>((draft) => {
-        for (let x = 0; x < block.grid.length; x++) {
-          for (let y = 0; y < block.grid.length; y++) {
-            if (
-              block.grid[y][x] !== '' &&
-              x + block.x < COLS &&
-              y + block.y < ROWS
-            ) {
-              draft.grid[y + block.y][x + block.x] = block.grid[y][x];
-            }
-          }
-        }
-      }),
-    );
-  };
-
-  const moveBlock = (block: Block, direction: Direction): [boolean, Block] => {
-    const nextBlock = { ...block };
-
-    match(direction)
-      .with('up', 'down', (d) => {
-        nextBlock.y = block.y + (d == 'up' ? -1 : 1);
-      })
-      .with('left', 'right', (d) => {
-        nextBlock.x = block.x + (d == 'left' ? -1 : 1);
-      })
-      .exhaustive();
-
-    return [detectCollision(state.grid, nextBlock), nextBlock];
-  };
-
-  const rotateBlock = (block: Block, clockwise: boolean): [boolean, Block] => {
-    const nextBlock = {
-      ...block,
-      grid: clockwise
-        ? block.grid[0].map((_, index) =>
-            block.grid.map((row) => row[index]).reverse(),
-          )
-        : block.grid
-            .map((row) => row.reverse())[0]
-            .map((_, index) => block.grid.map((row) => row[index])),
-    };
-
-    return [detectCollision(state.grid, nextBlock), nextBlock];
-  };
-
-  const findDropCollision = (block: Block): Block => {
-    let nextPos = block;
-    for (;;) {
-      const [collision, nextBlock] = moveBlock(nextPos, 'down');
-      if (collision) {
-        return nextPos;
-      } else {
-        nextPos = nextBlock;
-      }
-    }
-  };
-
   createRenderEffect(() => {
-    setGhost(findDropCollision(block()));
+    setGhost(findDropCollision(state.grid, block()));
   });
 
   const [time] = createGameLoop(
@@ -247,10 +244,17 @@ const App: Component = () => {
       const b = block();
       if (time >= b.lastTime + b.cooldown) {
         b.lastTime = time;
-        const [collision, nextBlock] = moveBlock(b, 'down');
+        const [collision, nextBlock] = moveBlock(state.grid, b, 'down');
         if (collision) {
-          stampBlock(block());
-          setBlock(defaultBlock(time, block()));
+          for (let y = 0; y < b.grid.length; y++) {
+            for (let x = 0; x < b.grid.length; x++) {
+              if (b.grid[y][x] !== '0' && x + b.x < COLS && y + b.y < ROWS) {
+                setState('grid', y + b.y, x + b.x, b.grid[y][x]);
+              }
+            }
+          }
+
+          setBlock(defaultBlock(time, b));
 
           if (detectCollision(state.grid, block())) {
             setGameOver(true);
@@ -262,7 +266,7 @@ const App: Component = () => {
       }
 
       for (let y = 0; y < ROWS; y++) {
-        if (state.grid[y].every((cell) => cell !== '')) {
+        if (state.grid[y].every((cell) => cell !== '0')) {
           setBlock((prev) => ({
             ...prev,
             cooldown: prev.cooldown - 0.01,
@@ -274,7 +278,7 @@ const App: Component = () => {
               draft.grid.splice(
                 0,
                 0,
-                range(0, COLS).map(() => ''),
+                range(0, COLS).map(() => '0'),
               );
             }),
           );
@@ -289,15 +293,19 @@ const App: Component = () => {
     if (e instanceof KeyboardEvent) {
       match(e.key)
         .with('ArrowLeft', running, () => {
-          const [collision, nextBlock] = moveBlock(block(), 'left');
+          const [collision, nextBlock] = moveBlock(state.grid, block(), 'left');
           if (!collision) setBlock(nextBlock);
         })
         .with('ArrowRight', running, () => {
-          const [collision, nextBlock] = moveBlock(block(), 'right');
+          const [collision, nextBlock] = moveBlock(
+            state.grid,
+            block(),
+            'right',
+          );
           if (!collision) setBlock(nextBlock);
         })
         .with('ArrowDown', running, () => {
-          const [collision, nextBlock] = moveBlock(block(), 'down');
+          const [collision, nextBlock] = moveBlock(state.grid, block(), 'down');
           if (!collision) {
             nextBlock.lastTime = time();
             setBlock(nextBlock);
@@ -305,7 +313,7 @@ const App: Component = () => {
         })
         .with(' ', running, () => {
           setBlock({
-            ...findDropCollision(block()),
+            ...findDropCollision(state.grid, block()),
             lastTime: 0,
           });
         })
@@ -319,7 +327,11 @@ const App: Component = () => {
         })
         .with('z', 'x', 'ArrowUp', (k) => {
           if (running()) {
-            const [collision, nextBlock] = rotateBlock(block(), k !== 'z');
+            const [collision, nextBlock] = rotateBlock(
+              state.grid,
+              block(),
+              k !== 'z',
+            );
             if (!collision) setBlock(nextBlock);
           }
         })
@@ -334,44 +346,38 @@ const App: Component = () => {
 
   return (
     <div class="select-none">
-      <div class="text-white text-2xl leading-4 flex">
+      <div class="text-white flex font-sat8x8 text-half">
         <div>TIME: {time().toFixed(1)}</div>
         <div class="ml-auto">{frame()}</div>
       </div>
       <div class="border-2 p-px">
         <div class="relative">
-          <div
-            class="grid"
-            style={{
-              'min-width': `calc((75vh / 64 + 4px) * ${COLS}`,
-              'grid-template-columns': `repeat(${COLS}, minmax(0, 1fr))`,
-            }}
-          >
-            <For each={flatten(state.grid)}>
-              {(cell, i) => <Cell cell={cell} />}
-            </For>
-          </div>
-          <div class="animate-pulse">
-            <Block
-              block={ghost()}
-              renderCell={(cell: Cell) => (
-                <Cell
-                  cell={cell}
-                  class="text-white bg-black border-dashed"
-                  style={{ opacity: cell !== '' ? 0.6 : 0 }}
-                />
+          <div class="absolute animate-pulse">
+            <Grid
+              grid={ghost().grid}
+              x={ghost().x}
+              y={ghost().y}
+              renderCell={(cell) => (
+                <div
+                  class="border-2 inset-px absolute border-current text-white bg-black border-dashed"
+                  style={{
+                    opacity: cell !== '0' ? 0.6 : 0,
+                    width: `${CELL_SIZE - 2}px`,
+                    height: `${CELL_SIZE - 2}px`,
+                  }}
+                ></div>
               )}
             />
           </div>
-          <Block
-            block={block()}
-            renderCell={(cell: Cell) => <Cell cell={cell} />}
-          />
+          <div class="absolute">
+            <Grid grid={block().grid} x={block().x} y={block().y} />
+          </div>
+          <Grid grid={state.grid} />
           <Show when={!running()}>
             <Show
               when={!gameOver()}
               fallback={
-                <div class="absolute inset-0 flex items-center justify-center text-white bg-black bg-opacity-80 text-4xl pt-1">
+                <div class="font-sat8x8 absolute text-half inset-0 flex items-center justify-center text-white bg-black bg-opacity-80">
                   <div class="text-center">
                     <div>GAME OVER</div>
                     <div>PRESS 'R' TO RESTART</div>
@@ -379,11 +385,9 @@ const App: Component = () => {
                 </div>
               }
             >
-              <div class="absolute inset-0 flex items-center justify-center text-white bg-black bg-opacity-80 text-4xl pt-1">
+              <div class="font-sat8x8 absolute text-half inset-0 flex items-center justify-center text-white bg-black bg-opacity-80">
                 <div class="text-center">
                   <div>PAUSED</div>
-                  <div>PRESS 'P' TO RESUME</div>
-                  <div>PRESS 'R' TO RESTART</div>
                 </div>
               </div>
             </Show>
@@ -394,59 +398,80 @@ const App: Component = () => {
   );
 };
 
-const Block: Component<{
-  block: Block;
-  renderCell: (cell: Cell) => JSX.Element;
-}> = (props) => (
-  <div
-    class={`grid ${
-      props.block.grid.length === 4 ? 'grid-cols-4' : 'grid-cols-3'
-    } absolute`}
-    style={{
-      'min-width': `calc((75vh / 64 + 4px) * ${props.block.grid.length}`,
-      left: `calc((75vh / 64 + 4px) * ${props.block.x})`,
-      top: `calc((75vh / 64 + 4px) * ${props.block.y})`,
-    }}
-  >
-    <Show when={props.block}>
-      {(block) => <For each={flatten(block.grid)}>{props?.renderCell}</For>}
-    </Show>
-  </div>
-);
+const Grid: Component<{
+  grid: Grid;
+  renderCell?: (cell: Cell) => JSX.Element;
+  x?: number;
+  y?: number;
+}> = (props) => {
+  const cols = () => props.grid[0].length;
+  const rows = () => props.grid.length;
 
-const Cell: Component<{
-  cell: Cell;
-  style?: any;
-  class?: string;
-}> = (props) => (
-  <div
-    class={`w-full h-full m-0.5 border-2 border-current ${
-      props.class || (props.cell !== '' ? TETROMINOS[props.cell].color : '')
-    }`}
-    style={{
-      opacity: props.cell !== '' ? 1 : 0,
-      width: 'calc(75vh / 64)',
-      height: 'calc((75vh / 64)',
-      ...(props.style && props.style),
-    }}
-  ></div>
-);
-
-const BiggerApp: Component = () => {
   return (
     <div
-      class="flex flex-col justify-center items-center w-screen"
-      style={{ height: '95vh' }}
+      class="relative"
+      style={{
+        width: `${cols() * CELL_SIZE}px`,
+        height: `${rows() * CELL_SIZE}px`,
+        transform: `translate(
+          ${(props.x || 0) * CELL_SIZE}px,
+          ${(props.y || 0) * CELL_SIZE}px
+        )`,
+      }}
     >
-      <div class="relative flex flex-wrap justify-center items-center">
-        {range(16).map(() => (
-          <div class="m-1">
-            <App />
+      <Index each={flatten(props.grid)}>
+        {(cell, i) => (
+          <div
+            style={{
+              position: 'absolute',
+              width: `${CELL_SIZE}px`,
+              height: `${CELL_SIZE}px`,
+              transform: `translate(
+                ${(i % cols()) * CELL_SIZE}px,
+                ${Math.trunc(i / cols()) * CELL_SIZE}px
+              )`,
+            }}
+          >
+            <Show
+              when={props.renderCell}
+              fallback={
+                <div
+                  class={`border border-current ${
+                    cell() !== '0'
+                      ? TETROMINOS[cell() as FilledCell].color || 'bg-red-600'
+                      : ''
+                  }`}
+                  style={{
+                    opacity: cell() !== '0' ? 1 : 0,
+                    width: `${CELL_SIZE}px`,
+                    height: `${CELL_SIZE}px`,
+                  }}
+                ></div>
+              }
+            >
+              {props.renderCell?.(cell())}
+            </Show>
           </div>
-        ))}
-      </div>
+        )}
+      </Index>
     </div>
   );
 };
 
-export default BiggerApp;
+const App: Component = () => {
+  return (
+    <div class="flex flex-col justify-center items-center w-screen h-screen">
+      {range(2).map(() => (
+        <div class="relative flex justify-center items-center">
+          {range(8).map(() => (
+            <div class="m-3">
+              <Stack />
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+export default App;
