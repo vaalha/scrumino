@@ -17,13 +17,12 @@ import { match, __, not, select, when } from 'ts-pattern';
 import createGameLoop from './createGameLoop';
 import createEventListener from '@solid-primitives/event-listener';
 
-type Cell = '0' | 'I' | 'J' | 'L' | 'O' | 'S' | 'T' | 'Z';
-
-type FilledCell = Exclude<Cell, '0'>;
+const EMPTY_CELL = '0';
+type EmptyCell = typeof EMPTY_CELL;
+type Cell = EmptyCell | 'I' | 'J' | 'L' | 'O' | 'S' | 'T' | 'Z';
+type FilledCell = Exclude<Cell, EmptyCell>;
 
 type Grid = Cell[][];
-
-type GridTemplate = string;
 
 type State = {
   grid: Grid;
@@ -35,7 +34,7 @@ type Tetromino = {
   x: number;
   y: number;
   color: string;
-  template: GridTemplate;
+  grid: Grid;
 };
 
 type Block = {
@@ -56,73 +55,73 @@ const TETROMINOS: Record<FilledCell, Tetromino> = {
     x: 3,
     y: 0,
     color: 'bg-cyan-400 text-cyan-700',
-    template: `
+    grid: defGrid(`
       0I00
       0I00
       0I00
       0I00
-    `,
+    `),
   },
   J: {
     x: 4,
     y: 0,
     color: 'bg-blue-400 text-blue-700',
-    template: `
+    grid: defGrid(`
       0J0
       0J0
       JJ0
-    `,
+    `),
   },
   L: {
     x: 3,
     y: 0,
     color: 'bg-orange-400 text-orange-700',
-    template: `
+    grid: defGrid(`
       0L0
       0L0
       0LL
-    `,
+    `),
   },
   O: {
     x: 3,
     y: -1,
     color: 'bg-amber-400 text-amber-700',
-    template: `
+    grid: defGrid(`
       0000
       0OO0
       0OO0
       0000
-    `,
+    `),
   },
   S: {
     x: 4,
     y: 0,
     color: 'bg-green-400 text-green-700',
-    template: `
+    grid: defGrid(`
       S00
       SS0
       0S0
-    `,
+    `),
   },
   T: {
     x: 3,
     y: 0,
     color: 'bg-purple-400 text-purple-700',
-    template: `
+    grid: defGrid(`
       0T0
       TTT
       000
-    `,
+    `),
   },
   Z: {
     x: 4,
     y: 0,
     color: 'bg-red-400 text-red-700',
-    template: `
+    grid: defGrid(`
       0Z0
       ZZ0
       Z00
-    `,
+    `),
   },
 };
 
@@ -133,14 +132,6 @@ const defaultState = (): State => ({
 const defaultBlock = (time: number, block?: Block): Block => {
   const shape = shuffle(Object.keys(TETROMINOS))[0] as FilledCell;
   const tetromino = TETROMINOS[shape];
-
-  const grid = tetromino.template
-    .trim()
-    .split(/\n+/)
-    .map((line) => {
-      return line.trim().split('') as Cell[];
-    });
-
   const cooldown = block?.cooldown || 1;
 
   return {
@@ -148,9 +139,17 @@ const defaultBlock = (time: number, block?: Block): Block => {
     ...tetromino,
     cooldown,
     lastTime: time,
-    grid,
   };
 };
+
+function defGrid(template: string): Grid {
+  return template
+    .trim()
+    .split(/\n+/)
+    .map((line) => {
+      return line.trim().split('') as Cell[];
+    });
+}
 
 function detectCollision(grid: Grid, block: Block) {
   for (let y = 0; y < block.grid.length; y++) {
@@ -350,7 +349,13 @@ const Stack: Component = () => {
         <div>TIME: {time().toFixed(1)}</div>
         <div class="ml-auto">{frame()}</div>
       </div>
-      <div class="border-2 p-px">
+      <div
+        class="border-2 p-px"
+        style={{
+          width: `${COLS * CELL_SIZE + 6}px`,
+          height: `${ROWS * CELL_SIZE + 6}px`,
+        }}
+      >
         <div class="relative">
           <div class="absolute animate-pulse">
             <Grid
