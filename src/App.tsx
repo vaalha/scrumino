@@ -424,39 +424,44 @@ const Grid: Component<{
         )`,
       }}
     >
-      <Index each={flatten(props.grid)}>
-        {(cell, i) => (
-          <div
-            style={{
-              position: 'absolute',
-              width: `${CELL_SIZE}px`,
-              height: `${CELL_SIZE}px`,
-              transform: `translate(
-                ${(i % cols()) * CELL_SIZE}px,
-                ${Math.trunc(i / cols()) * CELL_SIZE}px
-              )`,
-            }}
-          >
-            <Show
-              when={props.renderCell}
-              fallback={
-                <div
-                  class={`border border-current ${
-                    cell() !== '0'
-                      ? TETROMINOS[cell() as FilledCell].color || 'bg-red-600'
-                      : ''
-                  }`}
-                  style={{
-                    opacity: cell() !== '0' ? 1 : 0,
-                    width: `${CELL_SIZE}px`,
-                    height: `${CELL_SIZE}px`,
-                  }}
-                ></div>
-              }
-            >
-              {props.renderCell?.(cell())}
-            </Show>
-          </div>
+      <Index each={props.grid}>
+        {(_, y) => (
+          <Index each={props.grid[y]}>
+            {(cell, x) => (
+              <div
+                style={{
+                  position: 'absolute',
+                  width: `${CELL_SIZE}px`,
+                  height: `${CELL_SIZE}px`,
+                  transform: `translate(
+                    ${x * CELL_SIZE}px,
+                    ${y * CELL_SIZE}px
+                  )`,
+                }}
+              >
+                <Show
+                  when={props.renderCell}
+                  fallback={
+                    <div
+                      class={`border border-current ${
+                        cell() !== '0'
+                          ? TETROMINOS[cell() as FilledCell].color ||
+                            'bg-red-600'
+                          : ''
+                      }`}
+                      style={{
+                        opacity: cell() !== '0' ? 1 : 0,
+                        width: `${CELL_SIZE}px`,
+                        height: `${CELL_SIZE}px`,
+                      }}
+                    ></div>
+                  }
+                >
+                  {props.renderCell?.(cell())}
+                </Show>
+              </div>
+            )}
+          </Index>
         )}
       </Index>
     </div>
