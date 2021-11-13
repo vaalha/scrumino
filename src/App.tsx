@@ -1,4 +1,5 @@
 import {
+  batch,
   Component,
   createEffect,
   createRenderEffect,
@@ -126,7 +127,7 @@ const TETROMINOS: Record<FilledCell, Tetromino> = {
 };
 
 const defaultState = (): State => ({
-  grid: range(0, ROWS).map(() => range(0, COLS).map(() => '0')),
+  grid: range(0, ROWS).map(() => range(0, COLS).map(() => EMPTY_CELL)),
 });
 
 const defaultBlock = (time: number, block?: Block): Block => {
@@ -154,7 +155,7 @@ function defGrid(template: string): Grid {
 function detectCollision(grid: Grid, block: Block) {
   for (let y = 0; y < block.grid.length; y++) {
     for (let x = 0; x < block.grid.length; x++) {
-      if (block.grid[y][x] === '0') {
+      if (block.grid[y][x] === EMPTY_CELL) {
         continue;
       }
 
@@ -165,7 +166,7 @@ function detectCollision(grid: Grid, block: Block) {
         return true;
       }
 
-      if (grid[nextY][nextX] !== '0') {
+      if (grid[nextY][nextX] !== EMPTY_CELL) {
         return true;
       }
     }
@@ -232,7 +233,7 @@ const Stack: Component = () => {
   const [running, setRunning] = createSignal(true);
   const [gameOver, setGameOver] = createSignal(false);
 
-  createRenderEffect(() => {
+  createEffect(() => {
     setGhost(findDropCollision(state.grid, block()));
   });
 
@@ -242,30 +243,36 @@ const Stack: Component = () => {
 
       const b = block();
       if (time >= b.lastTime + b.cooldown) {
-        b.lastTime = time;
-        const [collision, nextBlock] = moveBlock(state.grid, b, 'down');
-        if (collision) {
-          for (let y = 0; y < b.grid.length; y++) {
-            for (let x = 0; x < b.grid.length; x++) {
-              if (b.grid[y][x] !== '0' && x + b.x < COLS && y + b.y < ROWS) {
-                setState('grid', y + b.y, x + b.x, b.grid[y][x]);
+        batch(() => {
+          b.lastTime = time;
+          const [collision, nextBlock] = moveBlock(state.grid, b, 'down');
+          if (collision) {
+            for (let y = 0; y < b.grid.length; y++) {
+              for (let x = 0; x < b.grid.length; x++) {
+                if (
+                  b.grid[y][x] !== EMPTY_CELL &&
+                  x + b.x < COLS &&
+                  y + b.y < ROWS
+                ) {
+                  setState('grid', y + b.y, x + b.x, b.grid[y][x]);
+                }
               }
             }
-          }
 
-          setBlock(defaultBlock(time, b));
-
-          if (detectCollision(state.grid, block())) {
-            setGameOver(true);
-            setRunning(false);
+            setBlock(defaultBlock(time, b));
+          } else {
+            setBlock(nextBlock);
           }
-        } else {
-          setBlock(nextBlock);
-        }
+        });
+      }
+
+      if (detectCollision(state.grid, block())) {
+        setGameOver(true);
+        setRunning(false);
       }
 
       for (let y = 0; y < ROWS; y++) {
-        if (state.grid[y].every((cell) => cell !== '0')) {
+        if (state.grid[y].every((cell) => cell !== EMPTY_CELL)) {
           setBlock((prev) => ({
             ...prev,
             cooldown: prev.cooldown - 0.01,
@@ -277,7 +284,7 @@ const Stack: Component = () => {
               draft.grid.splice(
                 0,
                 0,
-                range(0, COLS).map(() => '0'),
+                range(0, COLS).map(() => EMPTY_CELL),
               );
             }),
           );
@@ -366,7 +373,7 @@ const Stack: Component = () => {
                 <div
                   class="border-2 inset-px absolute border-current text-white bg-black border-dashed"
                   style={{
-                    opacity: cell !== '0' ? 0.6 : 0,
+                    opacity: cell !== EMPTY_CELL ? 0.6 : 0,
                     width: `${CELL_SIZE - 2}px`,
                     height: `${CELL_SIZE - 2}px`,
                   }}
@@ -444,13 +451,13 @@ const Grid: Component<{
                   fallback={
                     <div
                       class={`border border-current ${
-                        cell() !== '0'
+                        cell() !== EMPTY_CELL
                           ? TETROMINOS[cell() as FilledCell].color ||
                             'bg-red-600'
                           : ''
                       }`}
                       style={{
-                        opacity: cell() !== '0' ? 1 : 0,
+                        opacity: cell() !== EMPTY_CELL ? 1 : 0,
                         width: `${CELL_SIZE}px`,
                         height: `${CELL_SIZE}px`,
                       }}
@@ -473,7 +480,7 @@ const App: Component = () => {
     <div class="flex flex-col justify-center items-center w-screen h-screen">
       {range(2).map(() => (
         <div class="relative flex justify-center items-center">
-          {range(8).map(() => (
+          {range(4).map(() => (
             <div class="m-3">
               <Stack />
             </div>
